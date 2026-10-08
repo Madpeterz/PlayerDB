@@ -6,6 +6,12 @@ local PLAYERS_DIR = "PlayerDB/Players/"
 local COUNT_PATH = PLAYERS_DIR .. "_count.dat"
 -- dev mode: chat messages (new players, changes, errors) and debug output; off = silent
 local DEBUG = false
+-- dev: write everything the API returns for each targeted player to DUMP_PATH (overwritten per target)
+local DUMP_TARGET = false
+local DUMP_PATH = "PlayerDB/target_dump.dat"
+-- dev: same for every raid member, written to RAID_DUMP_PATH on each raid scan (overwritten per scan)
+local DUMP_RAID = false
+local RAID_DUMP_PATH = "PlayerDB/raid_dump.dat"
 
 -- the only way the addon writes to chat, so nothing reaches chat unless DEBUG is on
 function logbook.Chat(filter, message)
@@ -84,9 +90,9 @@ local function isPlayer(info)
 	return info.type == "character"
 end
 
-local function getFaction(info)
+local function getFaction(unit, info)
 	local ok, faction = pcall(function()
-		return api.Unit:GetFactionName("target")
+		return api.Unit:GetFactionName(unit)
 	end)
 	if ok and type(faction) == "string" and faction ~= "" then
 		return faction
@@ -140,10 +146,10 @@ local function getGuild(info)
 	return pickField(info, {"expeditionName", "expedition_name", "expedition", "guild", "guildName"})
 end
 
-local function getClass()
+local function getClass(unit)
 	local ok, class = pcall(function()
 		-- Unit:UnitClass only returns a base type (e.g. "mage"), this gives the real class name
-		return api.Ability:GetUnitClassName("target")
+		return api.Ability:GetUnitClassName(unit)
 	end)
 	if not ok or class == nil then
 		return nil
@@ -174,9 +180,9 @@ local function toGearScore(value)
 	return number
 end
 
-local function getGearScore(info)
+local function getGearScore(unit, info)
 	local ok, raw = pcall(function()
-		return api.Unit:UnitGearScore("target")
+		return api.Unit:UnitGearScore(unit)
 	end)
 	if not ok then
 		debugLog("UnitGearScore error: " .. tostring(raw))
@@ -195,6 +201,18 @@ local function getGearScore(info)
 		return nil
 	end
 	return copyPlain(gearScore)
+end
+
+-- Number from info[key] (at least minimum), stored as a plain value; nil when missing.
+local function getNumberField(info, key, minimum)
+	if type(info) ~= "table" then
+		return nil
+	end
+	local number = tonumber(info[key])
+	if number == nil or number < minimum then
+		return nil
+	end
+	return copyPlain(number)
 end
 
 local function findPlayer(log, name)
@@ -236,38 +254,71 @@ local function writeCount(count)
 	api.File:Write(COUNT_PATH, { players = copyPlain(count) })
 end
 
-function logbook.LogTarget()
-	local targetId = api.Unit:GetUnitId("target")
-	if targetId == nil then
-		debugLog("no target id")
+-- A batch caches the player files touched during one pass (a target change or a raid scan)
+-- so each file is read and written once, and _count.dat is only updated once.
+local function newBatch()
+	return { lists = {}, dirty = {}, added = 0 }
+end
+
+local function batchList(batch, path)
+	local log = batch.lists[path]
+	if log == nil then
+		log = readList(path)
+		batch.lists[path] = log
+		debugLog(path .. " has " .. #log .. " entries")
+	end
+	return log
+end
+
+local function flushBatch(batch)
+	for path in pairs(batch.dirty) do
+		api.File:Write(path, batch.lists[path])
+	end
+	if batch.added == 0 then
+		return 0
+	end
+	local count = readCount() + batch.added
+	writeCount(count)
+	return count
+end
+
+-- Records the player behind a unit token ("target", "team1".."team50", ...) into the batch.
+local function recordUnit(unit, batch)
+	local unitId = api.Unit:GetUnitId(unit)
+	if unitId == nil then
+		debugLog("no unit id for " .. unit)
 		return
 	end
 
-	local info = api.Unit:GetUnitInfoById(targetId)
+	local info = api.Unit:GetUnitInfoById(unitId)
 	dumpInfo(info)
 	if not isPlayer(info) then
-		debugLog("target " .. tostring(targetId) .. " is not a player")
+		debugLog(unit .. " " .. tostring(unitId) .. " is not a player")
 		return
 	end
 
-	local name = api.Unit:UnitName("target")
+	local name = api.Unit:UnitName(unit)
 	if name == nil or name == "" then
-		debugLog("player has no name")
+		debugLog(unit .. " has no name")
 		return
 	end
 
 	local guild = getGuild(info)
-	local faction = getFaction(info)
+	local faction = getFaction(unit, info)
 	local side = getSide(faction)
-	local class = getClass()
-	local gearScore = getGearScore(info)
+	local class = getClass(unit)
+	local gearScore = getGearScore(unit, info)
+	local level = getNumberField(info, "level", 1)
+	-- 0 is a real heir level (none earned yet)
+	local heirLevel = getNumberField(info, "heirLevel", 0)
 	local seen = copyPlain(api.Time:GetLocalTime())
-	debugLog("player '" .. name .. "' guild '" .. tostring(guild) .. "' faction '" .. tostring(faction)
-		.. "' side '" .. tostring(side) .. "' class '" .. tostring(class) .. "' gs '" .. tostring(gearScore) .. "'")
+	debugLog(unit .. " player '" .. name .. "' guild '" .. tostring(guild) .. "' faction '" .. tostring(faction)
+		.. "' side '" .. tostring(side) .. "' class '" .. tostring(class) .. "' gs '" .. tostring(gearScore)
+		.. "' level '" .. tostring(level) .. "' heir '" .. tostring(heirLevel) .. "'")
 
 	local path = playerPath(name)
-	local log = readList(path)
-	debugLog(path .. " has " .. #log .. " entries")
+	local log = batchList(batch, path)
+	batch.dirty[path] = true
 
 	local existing = findPlayer(log, name)
 	if existing == nil then
@@ -278,17 +329,16 @@ function logbook.LogTarget()
 			side = side,
 			class = class,
 			gear_score = gearScore,
+			level = level,
+			heir_level = heirLevel or "0",
 			first_seen = seen,
 			last_seen = seen,
 		}
-		api.File:Write(path, log)
-		local count = readCount() + 1
-		writeCount(count)
+		batch.added = batch.added + 1
 		logbook.Chat(11, "[PlayerDB] New player " .. name
 			.. " <" .. tostring(guild or "no guild") .. "> (" .. tostring(faction or "unknown")
 			.. ", " .. tostring(side or "unknown side") .. ") "
-			.. tostring(class or "unknown class") .. " GS " .. tostring(gearScore or "?") .. "."
-			.. " You now have " .. count .. " players logged")
+			.. tostring(class or "unknown class") .. " GS " .. tostring(gearScore or "?") .. ".")
 		return
 	end
 
@@ -307,19 +357,221 @@ function logbook.LogTarget()
 		end
 		existing.side = side
 	end
-	-- class (skillset swaps) and gear score change often, update silently
+	-- class (skillset swaps), gear score and levels change often, update silently
 	if class ~= nil then
 		existing.class = class
 	end
 	if gearScore ~= nil then
 		existing.gear_score = gearScore
 	end
+	if level ~= nil then
+		existing.level = level
+	end
+	if heirLevel ~= nil then
+		existing.heir_level = heirLevel
+	elseif existing.heir_level == nil then
+		existing.heir_level = "0"
+	end
 	existing.last_seen = seen
-	api.File:Write(path, log)
 
 	if #changes > 0 then
 		logbook.Chat(3, "[PlayerDB] " .. name .. " changed: " .. table.concat(changes, ", "))
 	end
+end
+
+local function reportCount(count)
+	if count > 0 then
+		logbook.Chat(11, "[PlayerDB] You now have " .. count .. " players logged")
+	end
+end
+
+-- Calls fn and returns a plain copy of its results; nil shows as "<nil>", errors as "<error: ...>".
+local function plainOrNil(value)
+	if value == nil then
+		return "<nil>"
+	end
+	return copyPlain(value)
+end
+
+-- the addon sandbox has no select(), so capture up to 4 return values (enough for x, y, z)
+local function probe(fn)
+	local ok, a, b, c, d = pcall(fn)
+	if not ok then
+		return "<error: " .. tostring(a) .. ">"
+	end
+	if b == nil and c == nil and d == nil then
+		return plainOrNil(a)
+	end
+	local out = { plainOrNil(a), plainOrNil(b) }
+	if c ~= nil or d ~= nil then
+		out[3] = plainOrNil(c)
+	end
+	if d ~= nil then
+		out[4] = plainOrNil(d)
+	end
+	return out
+end
+
+local function probeList(countFn, itemFn)
+	local ok, count = pcall(countFn)
+	count = ok and tonumber(count) or 0
+	local out = {}
+	for i = 1, count do
+		out[i] = probe(function()
+			return itemFn(i)
+		end)
+	end
+	return out
+end
+
+local MAX_TEAM_MEMBERS = 50
+
+-- adds each buff's tooltip text, to identify passives like heir level by name
+local function addBuffTooltips(list)
+	for _, buff in ipairs(list) do
+		local buffId = type(buff) == "table" and tonumber(buff.buff_id) or nil
+		if buffId ~= nil then
+			buff.tooltip = probe(function() return api.Ability:GetBuffTooltip(buffId) end)
+		end
+	end
+	return list
+end
+
+-- Everything the API returns for a player unit, or nil when the unit is not a player.
+local function buildDump(unit)
+	local unitId = api.Unit:GetUnitId(unit)
+	if unitId == nil or not isPlayer(api.Unit:GetUnitInfoById(unitId)) then
+		return nil
+	end
+	local U = api.Unit
+	local dump = {
+		unit = unit,
+		unitId = copyPlain(unitId),
+		name = probe(function() return U:UnitName(unit) end),
+		nameById = probe(function() return U:GetUnitNameById(unitId) end),
+		unitInfoById = probe(function() return U:GetUnitInfoById(unitId) end),
+		unitInfo = probe(function() return U:UnitInfo(unit) end),
+		unitModifierInfo = probe(function() return U:UnitModifierInfo(unit) end),
+		class = probe(function() return U:UnitClass(unit) end),
+		classNameAbility = probe(function() return api.Ability:GetUnitClassName(unit) end),
+		gearScore = probe(function() return U:UnitGearScore(unit) end),
+		faction = probe(function() return U:GetFactionName(unit) end),
+		health = probe(function() return U:UnitHealth(unit) end),
+		maxHealth = probe(function() return U:UnitMaxHealth(unit) end),
+		mana = probe(function() return U:UnitMana(unit) end),
+		maxMana = probe(function() return U:UnitMaxMana(unit) end),
+		distance = probe(function() return U:UnitDistance(unit) end),
+		worldPosition = probe(function() return U:UnitWorldPosition(unit) end),
+		isOffline = probe(function() return U:UnitIsOffline(unit) end),
+		isTeamMember = probe(function() return U:UnitIsTeamMember(unit) end),
+		isForceAttack = probe(function() return U:UnitIsForceAttack(unit) end),
+		teamAuthority = probe(function() return U:UnitTeamAuthority(unit) end),
+		lunagems = probe(function() return api.Equipment:GetEquippedSkillsetLunagems(unit) end),
+		buffs = addBuffTooltips(probeList(function() return U:UnitBuffCount(unit) end,
+			function(i) return U:UnitBuff(unit, i) end)),
+		debuffs = addBuffTooltips(probeList(function() return U:UnitDeBuffCount(unit) end,
+			function(i) return U:UnitDeBuff(unit, i) end)),
+	}
+	if string.find(unit, "^team") then
+		dump.memberIndex = probe(function() return api.Team:GetMemberIndexByName(U:UnitName(unit)) end)
+	end
+	return dump
+end
+
+local function dumpUnit(unit)
+	local dump = buildDump(unit)
+	if dump == nil then
+		return
+	end
+	api.File:Write(DUMP_PATH, dump)
+	debugLog("dumped " .. unit .. " to " .. DUMP_PATH)
+end
+
+-- every member present, in range or not, keyed by unit token
+local function dumpRaid(selfId)
+	local dump = {}
+	local dumped = 0
+	for i = 1, MAX_TEAM_MEMBERS do
+		local unit = "team" .. i
+		local unitId = api.Unit:GetUnitId(unit)
+		if unitId ~= nil and unitId ~= selfId then
+			local ok, memberDump = pcall(buildDump, unit)
+			if not ok then
+				memberDump = "<error: " .. tostring(memberDump) .. ">"
+			end
+			if memberDump ~= nil then
+				dump[unit] = memberDump
+				dumped = dumped + 1
+			end
+		end
+	end
+	if dumped > 0 then
+		api.File:Write(RAID_DUMP_PATH, dump)
+		debugLog("dumped " .. dumped .. " raid members to " .. RAID_DUMP_PATH)
+	end
+end
+
+function logbook.LogTarget()
+	local batch = newBatch()
+	recordUnit("target", batch)
+	reportCount(flushBatch(batch))
+	if DUMP_TARGET then
+		dumpUnit("target")
+	end
+end
+
+-- Logs your own character, so your entry stays current like any other player.
+function logbook.LogSelf()
+	local batch = newBatch()
+	recordUnit("player", batch)
+	reportCount(flushBatch(batch))
+end
+
+-- only log members close enough to be inspected, like a target would be
+local MAX_SCAN_DISTANCE = 30
+
+local function inScanRange(unit)
+	local ok, distance = pcall(function()
+		return api.Unit:UnitDistance(unit)
+	end)
+	distance = ok and tonumber(distance) or nil
+	if distance == nil or distance > MAX_SCAN_DISTANCE then
+		debugLog(unit .. " out of range (" .. tostring(distance) .. "m)")
+		return false
+	end
+	return true
+end
+
+-- Logs every member of your party/raid as if you had targeted them.
+-- Returns how many other members are in the team (in range or not), 0 when not in one.
+function logbook.ScanRaid()
+	local selfId = api.Unit:GetUnitId("player")
+	local batch = newBatch()
+	local members = 0
+	local scanned = 0
+	for i = 1, MAX_TEAM_MEMBERS do
+		local unit = "team" .. i
+		local unitId = api.Unit:GetUnitId(unit)
+		if unitId ~= nil and unitId ~= selfId then
+			members = members + 1
+		end
+		if unitId ~= nil and unitId ~= selfId and inScanRange(unit) then
+			-- one bad member must not stop the rest of the scan
+			local ok, err = pcall(recordUnit, unit, batch)
+			if ok then
+				scanned = scanned + 1
+			else
+				api.Log:Info("[PlayerDB] error scanning " .. unit .. ": " .. tostring(err))
+				logbook.Chat(3, "[PlayerDB] error scanning " .. unit .. ": " .. tostring(err))
+			end
+		end
+	end
+	debugLog("raid scan checked " .. scanned .. "/" .. members .. " members, " .. batch.added .. " new")
+	reportCount(flushBatch(batch))
+	if DUMP_RAID then
+		dumpRaid(selfId)
+	end
+	return members
 end
 
 return logbook

@@ -5,9 +5,73 @@ local logbook = require("PlayerDB/logbook")
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "1.0.0",
-	desc = "Logs players you target: name, guild and faction"
+	version = "1.0.2",
+	desc = "Logs players you target or team up with: name, guild and faction"
 }
+local function runSafe(fn)
+	local ok, result = pcall(fn)
+	if not ok then
+		-- always in the log file; in chat only in dev mode
+		api.Log:Info("[PlayerDB] error: " .. tostring(result))
+		logbook.Chat(3, "[PlayerDB] error: " .. tostring(result))
+		return nil
+	end
+	return result
+end
+
+-- TEAM_MEMBERS_CHANGED fires in bursts (joining a raid, people swapping groups)
+-- and member info is not always ready yet, so wait and scan once.
+local RAID_SCAN_DELAY_MS = 2000
+-- one more scan a while after the last change, for members who were out of range at first
+local RAID_RESCAN_DELAY_MS = 3 * 60 * 1000
+local raidScanPending = false
+-- bumped on every queued rescan; DoIn can't be cancelled, so older rescans see a newer id and skip
+local raidRescanId = 0
+
+local function queueRaidRescan()
+	raidRescanId = raidRescanId + 1
+	local rescanId = raidRescanId
+	api:DoIn(RAID_RESCAN_DELAY_MS, function()
+		if rescanId ~= raidRescanId or PlayerDB.eventWindow == nil then
+			return -- superseded by a later change, or unloaded meanwhile
+		end
+		runSafe(logbook.ScanRaid)
+	end)
+end
+
+local function queueRaidScan()
+	if raidScanPending then
+		return
+	end
+	raidScanPending = true
+	api:DoIn(RAID_SCAN_DELAY_MS, function()
+		raidScanPending = false
+		if PlayerDB.eventWindow == nil then
+			return -- unloaded meanwhile
+		end
+		local members = runSafe(logbook.ScanRaid)
+		if members ~= nil and members > 0 then
+			queueRaidRescan()
+		end
+	end)
+end
+
+-- log our own character on load and then on a fixed interval
+local SELF_LOG_FIRST_DELAY_MS = 5000
+local SELF_LOG_INTERVAL_MS = 15 * 60 * 1000
+-- bumped on every load; a timer chain from an earlier load sees a newer id and stops
+local selfLogId = 0
+
+local function queueSelfLog(loadId, delay)
+	api:DoIn(delay, function()
+		if loadId ~= selfLogId or PlayerDB.eventWindow == nil then
+			return -- reloaded or unloaded meanwhile
+		end
+		runSafe(logbook.LogSelf)
+		queueSelfLog(loadId, SELF_LOG_INTERVAL_MS)
+	end)
+end
+
 -- Addon initialization
 local function OnLoad()
 	api.Log:Info("[" .. PlayerDB.name .. "] Starting version " .. PlayerDB.version)
@@ -17,16 +81,18 @@ local function OnLoad()
 	-- attach events
 	function PlayerDB:EventListener(event, ...)
 		if(event == "TARGET_CHANGED") then
-			local ok, err = pcall(logbook.LogTarget)
-			if not ok then
-				-- always in the log file; in chat only in dev mode
-				api.Log:Info("[PlayerDB] error: " .. tostring(err))
-				logbook.Chat(3, "[PlayerDB] error: " .. tostring(err))
-			end
+			runSafe(logbook.LogTarget)
+		elseif(event == "TEAM_MEMBERS_CHANGED") then
+			queueRaidScan()
 		end
 	end
 	PlayerDB.eventWindow:SetHandler("OnEvent", PlayerDB.EventListener)
 	PlayerDB.eventWindow:RegisterEvent("TARGET_CHANGED")
+	PlayerDB.eventWindow:RegisterEvent("TEAM_MEMBERS_CHANGED")
+	-- already in a raid when the addon (re)loads
+	queueRaidScan()
+	selfLogId = selfLogId + 1
+	queueSelfLog(selfLogId, SELF_LOG_FIRST_DELAY_MS)
 end
 
 -- Addon cleanup
