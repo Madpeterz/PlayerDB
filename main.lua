@@ -1,11 +1,12 @@
 -- PlayerDB Main Module
 local api = require("api")
 local logbook = require("PlayerDB/logbook")
+local statusdots = require("PlayerDB/statusdots")
 
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "1.0.2",
+	version = "1.0.3",
 	desc = "Logs players you target or team up with: name, guild and faction"
 }
 local function runSafe(fn)
@@ -17,6 +18,13 @@ local function runSafe(fn)
 		return nil
 	end
 	return result
+end
+
+-- flips the status dot for a scan; a UI problem must never stop logging
+local function markScan(index)
+	runSafe(function()
+		statusdots.Toggle(index)
+	end)
 end
 
 -- TEAM_MEMBERS_CHANGED fires in bursts (joining a raid, people swapping groups)
@@ -36,6 +44,7 @@ local function queueRaidRescan()
 			return -- superseded by a later change, or unloaded meanwhile
 		end
 		runSafe(logbook.ScanRaid)
+		markScan(statusdots.RAID)
 	end)
 end
 
@@ -50,6 +59,7 @@ local function queueRaidScan()
 			return -- unloaded meanwhile
 		end
 		local members = runSafe(logbook.ScanRaid)
+		markScan(statusdots.RAID)
 		if members ~= nil and members > 0 then
 			queueRaidRescan()
 		end
@@ -68,6 +78,7 @@ local function queueSelfLog(loadId, delay)
 			return -- reloaded or unloaded meanwhile
 		end
 		runSafe(logbook.LogSelf)
+		markScan(statusdots.PLAYER)
 		queueSelfLog(loadId, SELF_LOG_INTERVAL_MS)
 	end)
 end
@@ -78,10 +89,12 @@ local function OnLoad()
 	-- hidden window, only used to receive game events
 	PlayerDB.eventWindow = api.Interface:CreateEmptyWindow("PlayerDBEvents")
 	PlayerDB.eventWindow:Show(false)
+	runSafe(statusdots.Create)
 	-- attach events
 	function PlayerDB:EventListener(event, ...)
 		if(event == "TARGET_CHANGED") then
 			runSafe(logbook.LogTarget)
+			markScan(statusdots.TARGET)
 		elseif(event == "TEAM_MEMBERS_CHANGED") then
 			queueRaidScan()
 		end
@@ -103,6 +116,7 @@ local function OnUnload()
 		api.Interface:Free(PlayerDB.eventWindow)
 		PlayerDB.eventWindow = nil
 	end
+	runSafe(statusdots.Free)
 end
 
 PlayerDB.OnSettingToggle = nil
