@@ -7,7 +7,7 @@ local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
 	version = "1.1.1",
-	desc = "Logs players you target or team up with: name, guild, family and faction"
+	desc = "Logs targeted and grouped players"
 }
 local function runSafe(fn)
 	local ok, result = pcall(fn)
