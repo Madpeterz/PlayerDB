@@ -219,47 +219,6 @@ local function getFamily(info)
 	return pickField(info, {"family_name", "familyName", "family"})
 end
 
--- a unit's max health or mana (whole number), nil when unknown
-local function getMax(fn)
-	local ok, value = pcall(fn)
-	value = ok and tonumber(value) or nil
-	if value == nil or value <= 0 then
-		return nil
-	end
-	return copyPlain(math.floor(value))
-end
-
--- the character sheet stats kept, as UnitInfo names them; the site has the same list
-local STAT_KEYS = {
-	"str", "dex", "sta", "int", "spi",
-	"melee_dps", "ranged_dps", "spell_dps", "heal_dps",
-	"melee_critical_rate", "ranged_critical_rate", "spell_critical_rate", "heal_critical_rate",
-	"armor", "magic_resist", "battle_resist", "flexibility",
-	"dodge_rate", "melee_parry_rate", "block_rate",
-	"ignore_armor", "magic_penetration", "health_regen", "mana_regen", "move_speed",
-}
-
--- Their character sheet; UnitInfo only has it for party/raid members (and yourself), nil otherwise.
-local function getStats(unit)
-	local ok, info = pcall(function()
-		return api.Unit:UnitInfo(unit)
-	end)
-	if not ok or type(info) ~= "table" then
-		return nil
-	end
-	local stats = {}
-	local found = false
-	for _, key in ipairs(STAT_KEYS) do
-		local number = tonumber(info[key])
-		if number ~= nil then
-			-- 2 decimals is plenty, and keeps the files small
-			stats[key] = copyPlain(math.floor(number * 100 + 0.5) / 100)
-			found = true
-		end
-	end
-	return found and stats or nil
-end
-
 -- buff id => the guild buff read from its tooltip, or false for any other buff; tooltips don't
 -- change, so each is only read once a session
 local guildBuffs = {}
@@ -426,11 +385,8 @@ local function recordUnit(unit, batch)
 	local level = getNumberField(info, "level", 1)
 	-- 0 is a real heir level (none earned yet)
 	local heirLevel = getNumberField(info, "heirLevel", 0)
-	-- only party/raid members show their family and character sheet
+	-- only party/raid members show their family
 	local family = getFamily(info)
-	local maxHealth = getMax(function() return api.Unit:UnitMaxHealth(unit) end)
-	local maxMana = getMax(function() return api.Unit:UnitMaxMana(unit) end)
-	local stats = getStats(unit)
 	local guildBuffOk, guildBuff = pcall(getGuildBuff, unit)
 	if not guildBuffOk then
 		debugLog("guild buff error: " .. tostring(guildBuff))
@@ -440,8 +396,7 @@ local function recordUnit(unit, batch)
 	debugLog(unit .. " player '" .. name .. "' guild '" .. tostring(guild) .. "' faction '" .. tostring(faction)
 		.. "' side '" .. tostring(side) .. "' class '" .. tostring(class) .. "' gs '" .. tostring(gearScore)
 		.. "' level '" .. tostring(level) .. "' heir '" .. tostring(heirLevel) .. "' family '" .. tostring(family)
-		.. "' hp '" .. tostring(maxHealth) .. "' stats " .. tostring(stats ~= nil)
-		.. " guild buff '" .. tostring(guildBuff and guildBuff.id) .. "'")
+		.. "' guild buff '" .. tostring(guildBuff and guildBuff.id) .. "'")
 
 	local path = playerPath(name)
 	local log = batchList(batch, path)
@@ -459,9 +414,6 @@ local function recordUnit(unit, batch)
 			gear_score = gearScore,
 			level = level,
 			heir_level = heirLevel or "0",
-			max_health = maxHealth,
-			max_mana = maxMana,
-			stats = stats,
 			first_seen = seen,
 			last_seen = seen,
 		}
@@ -505,19 +457,14 @@ local function recordUnit(unit, batch)
 	elseif existing.heir_level == nil then
 		existing.heir_level = "0"
 	end
-	-- seen on raid members only: a target without them keeps what was seen before
+	-- seen on raid members only: a target without one keeps what was seen before
 	if family ~= nil then
 		existing.family = family
 	end
-	if maxHealth ~= nil then
-		existing.max_health = maxHealth
-	end
-	if maxMana ~= nil then
-		existing.max_mana = maxMana
-	end
-	if stats ~= nil then
-		existing.stats = stats
-	end
+	-- stats were logged by 1.1.0, no longer kept
+	existing.max_health = nil
+	existing.max_mana = nil
+	existing.stats = nil
 	setGuildBuff(existing, guild, guildBuff)
 	existing.last_seen = seen
 

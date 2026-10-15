@@ -6,8 +6,8 @@ local statusdots = require("PlayerDB/statusdots")
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "1.1.0",
-	desc = "Logs players you target or team up with: name, guild, family, faction and stats"
+	version = "1.1.1",
+	desc = "Logs players you target or team up with: name, guild, family and faction"
 }
 local function runSafe(fn)
 	local ok, result = pcall(fn)
