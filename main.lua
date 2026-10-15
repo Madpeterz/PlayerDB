@@ -6,7 +6,7 @@ local statusdots = require("PlayerDB/statusdots")
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "1.1.1",
+	version = "1.1.2",
 	desc = "Logs targeted and grouped players"
 }
 local function runSafe(fn)
