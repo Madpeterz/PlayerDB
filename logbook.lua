@@ -215,6 +215,121 @@ local function getNumberField(info, key, minimum)
 	return copyPlain(number)
 end
 
+local function getFamily(info)
+	return pickField(info, {"family_name", "familyName", "family"})
+end
+
+-- a unit's max health or mana (whole number), nil when unknown
+local function getMax(fn)
+	local ok, value = pcall(fn)
+	value = ok and tonumber(value) or nil
+	if value == nil or value <= 0 then
+		return nil
+	end
+	return copyPlain(math.floor(value))
+end
+
+-- the character sheet stats kept, as UnitInfo names them; the site has the same list
+local STAT_KEYS = {
+	"str", "dex", "sta", "int", "spi",
+	"melee_dps", "ranged_dps", "spell_dps", "heal_dps",
+	"melee_critical_rate", "ranged_critical_rate", "spell_critical_rate", "heal_critical_rate",
+	"armor", "magic_resist", "battle_resist", "flexibility",
+	"dodge_rate", "melee_parry_rate", "block_rate",
+	"ignore_armor", "magic_penetration", "health_regen", "mana_regen", "move_speed",
+}
+
+-- Their character sheet; UnitInfo only has it for party/raid members (and yourself), nil otherwise.
+local function getStats(unit)
+	local ok, info = pcall(function()
+		return api.Unit:UnitInfo(unit)
+	end)
+	if not ok or type(info) ~= "table" then
+		return nil
+	end
+	local stats = {}
+	local found = false
+	for _, key in ipairs(STAT_KEYS) do
+		local number = tonumber(info[key])
+		if number ~= nil then
+			-- 2 decimals is plenty, and keeps the files small
+			stats[key] = copyPlain(math.floor(number * 100 + 0.5) / 100)
+			found = true
+		end
+	end
+	return found and stats or nil
+end
+
+-- buff id => the guild buff read from its tooltip, or false for any other buff; tooltips don't
+-- change, so each is only read once a session
+local guildBuffs = {}
+
+-- the number after a phrase in a tooltip, colour codes and all, e.g. "Can summon a max of |nc;14|r"
+local function tooltipNumber(text, pattern)
+	local value = string.match(text, pattern)
+	return value and copyPlain(tonumber(value)) or nil
+end
+
+local function readGuildBuff(buffId)
+	local ok, tooltip = pcall(function()
+		return api.Ability:GetBuffTooltip(buffId)
+	end)
+	if not ok or type(tooltip) ~= "table" then
+		return false
+	end
+	local name = type(tooltip.name) == "string" and tooltip.name or ""
+	-- colour codes out: |cFFFF9C27, |nc; and |r
+	local text = string.gsub(string.gsub(string.gsub(tostring(tooltip.description or ""), "|c%x%x%x%x%x%x%x%x", ""), "|nc;", ""), "|r", "")
+	if not string.find(name, "Kyprosa", 1, true) and not string.find(text, "guild members", 1, true) then
+		return false
+	end
+	return {
+		id = copyPlain(buffId),
+		summon = tooltipNumber(text, "max of (%d+) guild members"),
+		xp = tooltipNumber(text, "XP gain %+(%d+)%%"),
+		loot = tooltipNumber(text, "loot drop rate %+(%d+)%%"),
+	}
+end
+
+-- Their guild buff (Kyprosa's Energy, which grows with the guild): {id, summon, xp, loot}, or nil.
+local function getGuildBuff(unit)
+	local ok, count = pcall(function()
+		return api.Unit:UnitBuffCount(unit)
+	end)
+	count = ok and tonumber(count) or 0
+	for i = 1, count do
+		local buffOk, buff = pcall(function()
+			return api.Unit:UnitBuff(unit, i)
+		end)
+		local buffId = buffOk and type(buff) == "table" and tonumber(buff.buff_id) or nil
+		if buffId ~= nil then
+			if guildBuffs[buffId] == nil then
+				guildBuffs[buffId] = readGuildBuff(buffId)
+			end
+			if guildBuffs[buffId] then
+				return guildBuffs[buffId]
+			end
+		end
+	end
+	return nil
+end
+
+-- Sets the entry's guild buff fields: from the buff when seen, cleared when they have no guild,
+-- otherwise left as they were (the buff can be missing for a moment, e.g. while loading in).
+local function setGuildBuff(entry, guild, buff)
+	if buff ~= nil then
+		entry.guild_buff = buff.id
+		entry.guild_summon = buff.summon
+		entry.guild_xp = buff.xp
+		entry.guild_loot = buff.loot
+	elseif guild == nil then
+		entry.guild_buff = nil
+		entry.guild_summon = nil
+		entry.guild_xp = nil
+		entry.guild_loot = nil
+	end
+end
+
 local function findPlayer(log, name)
 	for _, entry in ipairs(log) do
 		if entry.name == name then
@@ -311,10 +426,22 @@ local function recordUnit(unit, batch)
 	local level = getNumberField(info, "level", 1)
 	-- 0 is a real heir level (none earned yet)
 	local heirLevel = getNumberField(info, "heirLevel", 0)
+	-- only party/raid members show their family and character sheet
+	local family = getFamily(info)
+	local maxHealth = getMax(function() return api.Unit:UnitMaxHealth(unit) end)
+	local maxMana = getMax(function() return api.Unit:UnitMaxMana(unit) end)
+	local stats = getStats(unit)
+	local guildBuffOk, guildBuff = pcall(getGuildBuff, unit)
+	if not guildBuffOk then
+		debugLog("guild buff error: " .. tostring(guildBuff))
+		guildBuff = nil
+	end
 	local seen = copyPlain(api.Time:GetLocalTime())
 	debugLog(unit .. " player '" .. name .. "' guild '" .. tostring(guild) .. "' faction '" .. tostring(faction)
 		.. "' side '" .. tostring(side) .. "' class '" .. tostring(class) .. "' gs '" .. tostring(gearScore)
-		.. "' level '" .. tostring(level) .. "' heir '" .. tostring(heirLevel) .. "'")
+		.. "' level '" .. tostring(level) .. "' heir '" .. tostring(heirLevel) .. "' family '" .. tostring(family)
+		.. "' hp '" .. tostring(maxHealth) .. "' stats " .. tostring(stats ~= nil)
+		.. " guild buff '" .. tostring(guildBuff and guildBuff.id) .. "'")
 
 	local path = playerPath(name)
 	local log = batchList(batch, path)
@@ -322,18 +449,24 @@ local function recordUnit(unit, batch)
 
 	local existing = findPlayer(log, name)
 	if existing == nil then
-		log[#log + 1] = {
+		local entry = {
 			name = name,
 			guild = guild,
+			family = family,
 			faction = faction,
 			side = side,
 			class = class,
 			gear_score = gearScore,
 			level = level,
 			heir_level = heirLevel or "0",
+			max_health = maxHealth,
+			max_mana = maxMana,
+			stats = stats,
 			first_seen = seen,
 			last_seen = seen,
 		}
+		setGuildBuff(entry, guild, guildBuff)
+		log[#log + 1] = entry
 		batch.added = batch.added + 1
 		logbook.Chat(11, "[PlayerDB] New player " .. name
 			.. " <" .. tostring(guild or "no guild") .. "> (" .. tostring(faction or "unknown")
@@ -372,6 +505,20 @@ local function recordUnit(unit, batch)
 	elseif existing.heir_level == nil then
 		existing.heir_level = "0"
 	end
+	-- seen on raid members only: a target without them keeps what was seen before
+	if family ~= nil then
+		existing.family = family
+	end
+	if maxHealth ~= nil then
+		existing.max_health = maxHealth
+	end
+	if maxMana ~= nil then
+		existing.max_mana = maxMana
+	end
+	if stats ~= nil then
+		existing.stats = stats
+	end
+	setGuildBuff(existing, guild, guildBuff)
 	existing.last_seen = seen
 
 	if #changes > 0 then
