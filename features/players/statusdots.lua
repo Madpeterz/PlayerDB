@@ -193,6 +193,9 @@ function statusdots.Free()
 	if window == nil then
 		return
 	end
+	-- stop a running tooltip refresh, then hide before freeing (as WorldSatNav unloads its windows)
+	hoverId = hoverId + 1
+	window:Show(false)
 	api.Interface:Free(window)
 	window = nil
 	dots = {}

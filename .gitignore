@@ -1,6 +1,24 @@
 __pycache__/
-# player logs written by the addon (Players/empty.keep stays tracked)
+
+# logged data written by the addon (the empty.keep files stay tracked)
 Players/*.dat
+Houses/*.dat
+Regrades/*.dat
+
+# feature switches
+settings.dat
+
+# regrade error log
+regrade_errors.dat
+
+# dev dumps
 target_dump.dat
 raid_dump.dat
+house_dump.dat
+locate_dump.dat
+api_discovery.dat
+
+# status dot positions
 ui.dat
+ui_houses.dat
+ui_regrades.dat
