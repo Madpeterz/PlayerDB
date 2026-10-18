@@ -14,6 +14,7 @@ local defaultSettings = {
 	PlayersEnabled = true,
 	HousesEnabled = true,
 	RegradesEnabled = true,
+	ForSaleEnabled = true,
 
 	-- status dot positions
 	PlayerDotsX = 400,
@@ -29,6 +30,7 @@ local FEATURE_KEYS = {
 	players = "PlayersEnabled",
 	houses = "HousesEnabled",
 	regrades = "RegradesEnabled",
+	forsale = "ForSaleEnabled",
 }
 
 local function loadSettings()

@@ -1,5 +1,5 @@
 -- PlayerDB Main Module
--- Hosts the features (players, houses, regrades). One hidden event window registers every event and
+-- Hosts the features (players, houses, regrades, forsale). One hidden event window registers every event and
 -- calls the features directly; switched-off features ignore them. The addon manager's settings button
 -- opens a window to switch features on and off.
 local api = require("api")
@@ -11,7 +11,7 @@ local settingswindow = require("PlayerDB/settingswindow")
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "2.5.1",
+	version = "2.5.3",
 	desc = "Logs players, houses and regrades"
 }
 -- stamped on every logged entry as addon_version
@@ -20,9 +20,21 @@ addoninfo.version = PlayerDB.version
 local players = require("PlayerDB/features/players/feature")
 local houses = require("PlayerDB/features/houses/feature")
 local regrades = require("PlayerDB/features/regrades/feature")
+local forsale = require("PlayerDB/features/forsale/feature")
 
 -- for the settings window, reset and startup line
-local FEATURES = { players, houses, regrades }
+local FEATURES = { players, houses, regrades, forsale }
+
+-- house sale events, all passed to the ForSale feature as they come
+local HOUSE_SALE_EVENTS = {
+	HOUSE_SALE_SUCCESS = true,
+	HOUSE_SET_SELL_SUCCESS = true,
+	HOUSE_SET_SELL_FAIL = true,
+	HOUSE_CANCEL_SELL_SUCCESS = true,
+	HOUSE_CANCEL_SELL_FAIL = true,
+	HOUSE_BUY_SUCCESS = true,
+	HOUSE_BUY_FAIL = true,
+}
 
 local function runSafe(fn)
 	local ok, result = pcall(fn)
@@ -115,6 +127,11 @@ local function OnLoad()
 			runSafe(function()
 				regrades.OnGradeEnchantResult(resultCode, itemLink, oldGrade, newGrade)
 			end)
+		elseif HOUSE_SALE_EVENTS[event] then
+			local a1, a2, a3, a4, a5, a6, a7, a8 = ...
+			runSafe(function()
+				forsale.OnHouseEvent(event, a1, a2, a3, a4, a5, a6, a7, a8)
+			end)
 		end
 	end
 	PlayerDB.eventWindow:SetHandler("OnEvent", PlayerDB.EventListener)
@@ -122,6 +139,13 @@ local function OnLoad()
 	PlayerDB.eventWindow:RegisterEvent("TEAM_MEMBERS_CHANGED")
 	PlayerDB.eventWindow:RegisterEvent("GRADE_ENCHANT_BROADCAST")
 	PlayerDB.eventWindow:RegisterEvent("GRADE_ENCHANT_RESULT")
+	PlayerDB.eventWindow:RegisterEvent("HOUSE_SALE_SUCCESS")
+	PlayerDB.eventWindow:RegisterEvent("HOUSE_SET_SELL_SUCCESS")
+	PlayerDB.eventWindow:RegisterEvent("HOUSE_SET_SELL_FAIL")
+	PlayerDB.eventWindow:RegisterEvent("HOUSE_CANCEL_SELL_SUCCESS")
+	PlayerDB.eventWindow:RegisterEvent("HOUSE_CANCEL_SELL_FAIL")
+	PlayerDB.eventWindow:RegisterEvent("HOUSE_BUY_SUCCESS")
+	PlayerDB.eventWindow:RegisterEvent("HOUSE_BUY_FAIL")
 
 	for _, feature in ipairs(FEATURES) do
 		if isEnabled(feature.id) then

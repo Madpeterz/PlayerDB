@@ -4,6 +4,7 @@ __pycache__/
 Players/*.dat
 Houses/*.dat
 Regrades/*.dat
+ForSale/*.dat
 
 # feature switches
 settings.dat
