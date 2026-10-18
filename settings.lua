@@ -1,27 +1,97 @@
 local api = require("api")
 
--- Which features are switched on, kept in PlayerDB/settings.dat.
--- Values are stored as "on"/"off" strings; anything missing counts as on.
+-- PlayerDB's settings, kept in the game's addon_settings under "PlayerDB" (the same way WorldSatNav's
+-- core/settings.lua does it): feature switches and status dot positions.
 local settings = {}
 
-local SETTINGS_PATH = "PlayerDB/settings.dat"
+local addonName = "PlayerDB"
+local getSettings = api.GetSettings
+local saveSettings = api.SaveSettings
 
-local function read()
-	local saved = api.File:Read(SETTINGS_PATH)
-	if type(saved) ~= "table" then
-		return {}
+local loaded = nil
+local defaultSettings = {
+	-- features
+	PlayersEnabled = true,
+	HousesEnabled = true,
+	RegradesEnabled = true,
+
+	-- status dot positions
+	PlayerDotsX = 400,
+	PlayerDotsY = 400,
+	HouseDotX = 400,
+	HouseDotY = 420,
+	RegradeDotX = 400,
+	RegradeDotY = 440,
+}
+
+-- feature id -> setting key
+local FEATURE_KEYS = {
+	players = "PlayersEnabled",
+	houses = "HousesEnabled",
+	regrades = "RegradesEnabled",
+}
+
+local function loadSettings()
+	local loadedSettings = getSettings(addonName)
+	if loadedSettings == nil then
+		loadedSettings = {}
 	end
-	return saved
+	-- Fill in missing keys with defaults in memory only (as WorldSatNav does): if getSettings came
+	-- back empty because of a load problem, saving here would overwrite the real settings.
+	for key, value in pairs(defaultSettings) do
+		if loadedSettings[key] == nil then
+			loadedSettings[key] = value
+		end
+	end
+	return loadedSettings
 end
 
+local function ensureLoaded()
+	if loaded == nil then
+		loaded = loadSettings()
+	end
+	return loaded
+end
+
+function settings.KeyExists(key)
+	return key ~= nil and defaultSettings[key] ~= nil
+end
+
+function settings.Get(key)
+	if not settings.KeyExists(key) then
+		return nil
+	end
+	local current = ensureLoaded()
+	if current[key] == nil then
+		return defaultSettings[key]
+	end
+	return current[key]
+end
+
+function settings.Is(key, value)
+	return settings.Get(key) == value
+end
+
+function settings.Update(key, value)
+	if not settings.KeyExists(key) then
+		return false
+	end
+	local current = ensureLoaded()
+	local oldValue = current[key]
+	current[key] = value
+	if oldValue ~= value then
+		saveSettings(addonName, current)
+	end
+	return true
+end
+
+-- feature switches, by feature id ("players", "houses", "regrades")
 function settings.IsEnabled(featureId)
-	return read()[featureId] ~= "off"
+	return settings.Get(FEATURE_KEYS[featureId]) ~= false
 end
 
 function settings.SetEnabled(featureId, isEnabled)
-	local saved = read()
-	saved[featureId] = isEnabled and "on" or "off"
-	api.File:Write(SETTINGS_PATH, saved)
+	settings.Update(FEATURE_KEYS[featureId], isEnabled == true)
 end
 
 return settings

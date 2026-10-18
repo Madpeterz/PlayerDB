@@ -1,7 +1,7 @@
 local api = require("api")
 
 -- Settings window opened from the addon manager (OnSettingToggle):
--- one checkbox per feature. Changes apply right away and are saved.
+-- one checkbox per feature (changes apply right away and are saved) and a Reset data button.
 -- Look and checkbox logic copied from WorldSatNav's settings page (ui/configui.lua, helpers/widgets.lua).
 local settingswindow = {}
 
@@ -20,9 +20,21 @@ local TOP = 55
 local ROW_HEIGHT = 30
 local CHECKBOX_SIZE = 25
 local FONT_SIZE = 14
+-- reset button, below the checkboxes
+local RESET_GAP = 10
+local RESET_WIDTH = 140
+local RESET_HEIGHT = 26
+local RESET_TEXT = "Reset data"
+local RESET_CONFIRM_TEXT = "Click to confirm"
+-- the second click must come within this time, or the button goes back to RESET_TEXT
+local RESET_CONFIRM_MS = 5000
 
 local window = nil
 local closeButton = nil
+local resetButton = nil
+-- bumped on every reset click; an older confirm timeout sees a newer id and leaves the button alone
+local resetClickId = 0
+local resetArmed = false
 -- parts of each checkbox, hidden and released on unload
 local checkboxes = {}
 
@@ -158,9 +170,41 @@ local function hideCheckbox(checkbox)
 	checkbox.overlay:Show(false)
 end
 
--- features: list of { id, label }; isEnabled(id) -> bool; setEnabled(id, bool)
-local function create(features, isEnabled, setEnabled)
-	local height = TOP + #features * ROW_HEIGHT + PADDING
+-- Wipes all logged data, but only on a second click within RESET_CONFIRM_MS.
+local function createResetButton(offsetY, resetData)
+	resetButton = api.Interface:CreateWidget("button", "PlayerDBSettingsReset", window)
+	resetButton:AddAnchor("TOPLEFT", window, PADDING, offsetY)
+	-- the skin sets its own size, so size the button after applying it
+	api.Interface:ApplyButtonSkin(resetButton, BUTTON_BASIC.DEFAULT)
+	resetButton:SetExtent(RESET_WIDTH, RESET_HEIGHT)
+	resetButton:SetText(RESET_TEXT)
+	function resetButton:OnClick()
+		resetClickId = resetClickId + 1
+		if not resetArmed then
+			resetArmed = true
+			resetButton:SetText(RESET_CONFIRM_TEXT)
+			local clickId = resetClickId
+			api:DoIn(RESET_CONFIRM_MS, function()
+				if clickId ~= resetClickId or resetButton == nil then
+					return -- clicked again, or unloaded
+				end
+				resetArmed = false
+				resetButton:SetText(RESET_TEXT)
+			end)
+			return
+		end
+		resetArmed = false
+		resetButton:SetText(RESET_TEXT)
+		resetData()
+	end
+	resetButton:SetHandler("OnClick", resetButton.OnClick)
+	resetButton:Show(true)
+end
+
+-- features: list of { id, label }; isEnabled(id) -> bool; setEnabled(id, bool); resetData()
+local function create(features, isEnabled, setEnabled, resetData)
+	local resetY = TOP + #features * ROW_HEIGHT + RESET_GAP
+	local height = resetY + RESET_HEIGHT + PADDING
 	window = api.Interface:CreateEmptyWindow("PlayerDBSettings")
 	window:AddAnchor("CENTER", "UIParent", 0, 0)
 	window:SetExtent(WINDOW_WIDTH, height)
@@ -174,12 +218,13 @@ local function create(features, isEnabled, setEnabled)
 				setEnabled(feature.id, checked)
 			end)
 	end
+	createResetButton(resetY, resetData)
 	attachDrag(window)
 end
 
-function settingswindow.Open(features, isEnabled, setEnabled)
+function settingswindow.Open(features, isEnabled, setEnabled, resetData)
 	if window == nil then
-		create(features, isEnabled, setEnabled)
+		create(features, isEnabled, setEnabled, resetData)
 	end
 	window:Show(true)
 end
@@ -201,6 +246,15 @@ function settingswindow.Free()
 		end)
 		closeButton = nil
 	end
+	if resetButton ~= nil then
+		pcall(function()
+			resetButton:ReleaseHandler("OnClick")
+			resetButton:Show(false)
+		end)
+		resetButton = nil
+	end
+	resetArmed = false
+	resetClickId = resetClickId + 1
 	pcall(function()
 		window:ReleaseHandler("OnDragStart")
 		window:ReleaseHandler("OnDragStop")

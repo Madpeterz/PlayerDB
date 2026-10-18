@@ -22,3 +22,7 @@ api_discovery.dat
 ui.dat
 ui_houses.dat
 ui_regrades.dat
+
+# dev: regrade broadcast trace
+regrade_trace.dat
+event_trace.dat

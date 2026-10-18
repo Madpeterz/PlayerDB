@@ -1,5 +1,7 @@
 local api = require("api")
 local addoninfo = require("PlayerDB/addoninfo")
+local datafiles = require("PlayerDB/datafiles")
+local clock = require("PlayerDB/clock")
 
 local logbook = {}
 
@@ -8,6 +10,10 @@ local COUNT_PATH = REGRADES_DIR .. "_count.dat"
 -- errors go here instead of chat; only the newest are kept
 local ERRORS_PATH = "PlayerDB/regrade_errors.dat"
 local MAX_ERRORS = 20
+-- dev: every GRADE_ENCHANT_BROADCAST received, with what happened to it (newest TRACE_MAX kept)
+local TRACE = true
+local TRACE_PATH = "PlayerDB/regrade_trace.dat"
+local TRACE_MAX = 20
 
 -- GRADE_ENCHANT_BROADCAST result codes (same values loss_porn uses)
 local RESULT_BREAK = 0
@@ -69,11 +75,15 @@ end
 
 -- ---------------------------------------------------------------------------
 -- Time
--- api.Time:GetLocalTime() is unix seconds (UTC).
+-- Unix seconds (UTC) from clock.lua, which keeps time between the game's coarse time steps.
 -- ---------------------------------------------------------------------------
 
 local function currentTime()
-	return tonumber(safeCall(function() return api.Time:GetLocalTime() end))
+	local now = tonumber(safeCall(clock.Now))
+	if now == nil then
+		return nil
+	end
+	return math.floor(now)
 end
 
 -- ---------------------------------------------------------------------------
@@ -168,9 +178,9 @@ local function isDuplicate(list, entry)
 	return false
 end
 
--- Saves one GRADE_ENCHANT_BROADCAST, failed or not. Returns the saved entry, or nil
--- (also when it repeats one already saved).
-function logbook.LogRegrade(characterName, resultCode, itemLink, oldGrade, newGrade)
+-- Saves one regrade, failed or not. source is "broadcast" (GRADE_ENCHANT_BROADCAST, anyone's) or
+-- "self" (GRADE_ENCHANT_RESULT, your own). Returns the saved entry, or nil (also when it repeats one already saved).
+function logbook.LogRegrade(characterName, resultCode, itemLink, oldGrade, newGrade, source)
 	local result = RESULT_NAMES[tonumber(resultCode)]
 	if result == nil then
 		logbook.LogError("unknown regrade result " .. tostring(resultCode) .. " by " .. tostring(characterName))
@@ -190,6 +200,7 @@ function logbook.LogRegrade(characterName, resultCode, itemLink, oldGrade, newGr
 		old_grade_id = tonumber(oldGrade) and numberToString(tonumber(oldGrade)) or nil,
 		new_grade_id = tonumber(newGrade) and numberToString(tonumber(newGrade)) or nil,
 		time = numberToString(seen),
+		source = source,
 		addon_version = addoninfo.version,
 	}
 
@@ -199,7 +210,7 @@ function logbook.LogRegrade(characterName, resultCode, itemLink, oldGrade, newGr
 		return nil
 	end
 	list[#list + 1] = entry
-	api.File:Write(path, list)
+	datafiles.Write(REGRADES_DIR, path, list)
 
 	local counts = readCounts()
 	counts.regrades = counts.regrades + 1
@@ -246,7 +257,41 @@ function logbook.LogError(message)
 	api.File:Write(ERRORS_PATH, list)
 end
 
+-- dev: records a received broadcast and its outcome ("saved", "duplicate", "disabled", "error: ...")
+function logbook.Trace(outcome, characterName, resultCode, itemLink, oldGrade, newGrade)
+	if not TRACE then
+		return
+	end
+	local list = readList(TRACE_PATH)
+	local seen = currentTime()
+	list[#list + 1] = {
+		time = seen and numberToString(seen) or nil,
+		outcome = tostring(outcome),
+		character = tostring(characterName),
+		result_code = tostring(resultCode),
+		item_link = tostring(itemLink),
+		old_grade = tostring(oldGrade),
+		new_grade = tostring(newGrade),
+		addon_version = addoninfo.version,
+	}
+	while #list > TRACE_MAX do
+		table.remove(list, 1)
+	end
+	api.File:Write(TRACE_PATH, list)
+end
+
 -- totals: regrades, losses, successes, and one per result name
+-- Empties every regrade file and zeroes the totals. Returns how many files were emptied.
+function logbook.ResetData()
+	local emptied = datafiles.Reset(REGRADES_DIR)
+	local counts = readCounts()
+	for key in pairs(counts) do
+		counts[key] = 0
+	end
+	writeCounts(counts)
+	return emptied
+end
+
 function logbook.Counts()
 	return readCounts()
 end

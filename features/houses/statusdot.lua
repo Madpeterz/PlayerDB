@@ -1,4 +1,6 @@
 local api = require("api")
+local clock = require("PlayerDB/clock")
+local settings = require("PlayerDB/settings")
 
 -- One dot showing the state of the current target:
 --   green  (a.png) the targeted building has been logged
@@ -22,7 +24,9 @@ local TEXTURES = {
 	[statusdot.FAR] = YELLOW,
 	[statusdot.LOGGED] = GREEN,
 }
-local POSITION_PATH = "PlayerDB/ui_houses.dat"
+-- position kept in the addon settings (settings.lua)
+local POSITION_X = "HouseDotX"
+local POSITION_Y = "HouseDotY"
 local DOT_SIZE = 16
 local DEFAULT_X = 400
 local DEFAULT_Y = 420
@@ -40,12 +44,9 @@ local lastName = nil
 local countFn = nil
 
 local function loadPosition()
-	local saved = api.File:Read(POSITION_PATH)
-	if type(saved) == "table" then
-		local x, y = tonumber(saved.x), tonumber(saved.y)
-		if x ~= nil and y ~= nil then
-			return x, y
-		end
+	local x, y = tonumber(settings.Get(POSITION_X)), tonumber(settings.Get(POSITION_Y))
+	if x ~= nil and y ~= nil then
+		return x, y
 	end
 	return DEFAULT_X, DEFAULT_Y
 end
@@ -55,10 +56,8 @@ local function savePosition()
 	if x == nil or y == nil then
 		return
 	end
-	api.File:Write(POSITION_PATH, {
-		x = string.format("%.0f", x),
-		y = string.format("%.0f", y),
-	})
+	settings.Update(POSITION_X, math.floor(x + 0.5))
+	settings.Update(POSITION_Y, math.floor(y + 0.5))
 end
 
 -- seconds on a steadily running clock; only differences are used
@@ -71,7 +70,7 @@ local function now()
 		return msec / 1000
 	end
 	local okLocal, time = pcall(function()
-		return api.Time:GetLocalTime()
+		return clock.Now()
 	end)
 	return okLocal and tonumber(time) or nil
 end

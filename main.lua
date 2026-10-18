@@ -1,8 +1,10 @@
 -- PlayerDB Main Module
--- Hosts the features (players, houses, regrades): one event window routes game events to the
--- features that are switched on. The addon manager's settings button opens a window to switch them.
+-- Hosts the features (players, houses, regrades). One hidden event window registers every event and
+-- calls the features directly; switched-off features ignore them. The addon manager's settings button
+-- opens a window to switch features on and off.
 local api = require("api")
 local addoninfo = require("PlayerDB/addoninfo")
+local clock = require("PlayerDB/clock")
 local settings = require("PlayerDB/settings")
 local settingswindow = require("PlayerDB/settingswindow")
 
@@ -15,11 +17,12 @@ local PlayerDB = {
 -- stamped on every logged entry as addon_version
 addoninfo.version = PlayerDB.version
 
-local FEATURES = {
-	require("PlayerDB/features/players/feature"),
-	require("PlayerDB/features/houses/feature"),
-	require("PlayerDB/features/regrades/feature"),
-}
+local players = require("PlayerDB/features/players/feature")
+local houses = require("PlayerDB/features/houses/feature")
+local regrades = require("PlayerDB/features/regrades/feature")
+
+-- for the settings window, reset and startup line
+local FEATURES = { players, houses, regrades }
 
 local function runSafe(fn)
 	local ok, result = pcall(fn)
@@ -60,6 +63,16 @@ local function setEnabled(featureId, enable)
 	api.Log:Info("[PlayerDB] " .. feature.label .. (enable and " on" or " off"))
 end
 
+-- empties every feature's logged data (Players, Houses, Regrades), from the settings window
+local function resetData()
+	local parts = {}
+	for _, feature in ipairs(FEATURES) do
+		local emptied = runSafe(feature.ResetData)
+		parts[#parts + 1] = feature.label .. " " .. tostring(emptied or "failed")
+	end
+	api.Log:Info("[PlayerDB] Data reset, files emptied: " .. table.concat(parts, ", "))
+end
+
 local function startupLine()
 	local parts = {}
 	for _, feature in ipairs(FEATURES) do
@@ -78,29 +91,38 @@ end
 -- Addon initialization
 local function OnLoad()
 	api.Log:Info(startupLine())
+	-- keeps clock.lua running between the game's coarse time steps (as WorldSatNav does)
+	api.On("UPDATE", function(dt)
+		clock.Advance(dt)
+	end)
 	-- hidden window, only used to receive game events
 	PlayerDB.eventWindow = api.Interface:CreateEmptyWindow("PlayerDBEvents")
 	PlayerDB.eventWindow:Show(false)
+	-- attach events; each feature call is guarded on its own so one failing can't stop another
 	function PlayerDB:EventListener(event, ...)
-		for _, feature in ipairs(FEATURES) do
-			-- one feature failing must not stop the others
-			local ok, err = pcall(feature.OnEvent, event, ...)
-			if not ok then
-				api.Log:Info("[PlayerDB] " .. feature.id .. " error: " .. tostring(err))
-			end
+		if event == "TARGET_CHANGED" then
+			runSafe(players.OnTargetChanged)
+			runSafe(houses.OnTargetChanged)
+		elseif event == "TEAM_MEMBERS_CHANGED" then
+			runSafe(players.OnTeamMembersChanged)
+		elseif event == "GRADE_ENCHANT_BROADCAST" then
+			local characterName, resultCode, itemLink, oldGrade, newGrade = ...
+			runSafe(function()
+				regrades.OnGradeEnchantBroadcast(characterName, resultCode, itemLink, oldGrade, newGrade)
+			end)
+		elseif event == "GRADE_ENCHANT_RESULT" then
+			local resultCode, itemLink, oldGrade, newGrade = ...
+			runSafe(function()
+				regrades.OnGradeEnchantResult(resultCode, itemLink, oldGrade, newGrade)
+			end)
 		end
 	end
 	PlayerDB.eventWindow:SetHandler("OnEvent", PlayerDB.EventListener)
-	-- every event any feature wants; features ignore events while switched off
-	local registered = {}
-	for _, feature in ipairs(FEATURES) do
-		for _, event in ipairs(feature.events) do
-			if not registered[event] then
-				registered[event] = true
-				PlayerDB.eventWindow:RegisterEvent(event)
-			end
-		end
-	end
+	PlayerDB.eventWindow:RegisterEvent("TARGET_CHANGED")
+	PlayerDB.eventWindow:RegisterEvent("TEAM_MEMBERS_CHANGED")
+	PlayerDB.eventWindow:RegisterEvent("GRADE_ENCHANT_BROADCAST")
+	PlayerDB.eventWindow:RegisterEvent("GRADE_ENCHANT_RESULT")
+
 	for _, feature in ipairs(FEATURES) do
 		if isEnabled(feature.id) then
 			runSafe(feature.Enable)
@@ -110,6 +132,8 @@ end
 
 -- Addon cleanup
 local function OnUnload()
+	-- unhook the clock (WorldSatNav unregisters UPDATE the same way)
+	api.On("UPDATE", function() return end)
 	for _, feature in ipairs(FEATURES) do
 		runSafe(feature.Disable)
 	end
@@ -124,7 +148,7 @@ end
 
 local function OnSettingToggle()
 	runSafe(function()
-		settingswindow.Open(FEATURES, isEnabled, setEnabled)
+		settingswindow.Open(FEATURES, isEnabled, setEnabled, resetData)
 	end)
 end
 

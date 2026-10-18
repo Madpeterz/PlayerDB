@@ -6,7 +6,6 @@ local statusdot = require("PlayerDB/features/regrades/statusdot")
 local feature = {
 	id = "regrades",
 	label = "Regrades",
-	events = { "GRADE_ENCHANT_BROADCAST" },
 }
 
 local enabled = false
@@ -21,10 +20,16 @@ local function runSafe(fn)
 	return result
 end
 
-local function onRegrade(characterName, resultCode, itemLink, oldGrade, newGrade)
-	local entry = runSafe(function()
-		return logbook.LogRegrade(characterName, resultCode, itemLink, oldGrade, newGrade)
-	end)
+local function onRegrade(characterName, resultCode, itemLink, oldGrade, newGrade, source)
+	local failure = nil
+	local ok, entry = pcall(logbook.LogRegrade, characterName, resultCode, itemLink, oldGrade, newGrade, source)
+	if not ok then
+		failure = entry
+		entry = nil
+		pcall(logbook.LogError, failure)
+	end
+	pcall(logbook.Trace, failure and ("error: " .. tostring(failure)) or (entry and "saved" or "not saved"),
+		characterName, resultCode, itemLink, oldGrade, newGrade)
 	if entry == nil then
 		return -- not saved (error already logged, or a repeated broadcast)
 	end
@@ -50,6 +55,11 @@ function feature.StartupInfo()
 	return counts.regrades .. " regrades logged (" .. counts.losses .. " losses)"
 end
 
+-- empties this feature's logged data
+function feature.ResetData()
+	return logbook.ResetData()
+end
+
 function feature.Enable()
 	if enabled then
 		return
@@ -68,15 +78,29 @@ function feature.Disable()
 	runSafe(statusdot.Free)
 end
 
-function feature.OnEvent(event, ...)
+-- main.lua calls these from its event window
+
+-- GRADE_ENCHANT_BROADCAST: server-wide announcement of anyone's regrade (not received at the moment)
+function feature.OnGradeEnchantBroadcast(characterName, resultCode, itemLink, oldGrade, newGrade)
 	if not enabled then
+		pcall(logbook.Trace, "disabled", characterName, resultCode, itemLink, oldGrade, newGrade)
 		return
 	end
-	if event == "GRADE_ENCHANT_BROADCAST" then
-		-- same arguments loss_porn reads
-		local characterName, resultCode, itemLink, oldGrade, newGrade = ...
-		onRegrade(characterName, resultCode, itemLink, oldGrade, newGrade)
+	-- same arguments loss_porn reads
+	onRegrade(characterName, resultCode, itemLink, oldGrade, newGrade, "broadcast")
+end
+
+-- GRADE_ENCHANT_RESULT: your own regrade, same codes without the character name
+-- (a fifth value is always 0)
+function feature.OnGradeEnchantResult(resultCode, itemLink, oldGrade, newGrade)
+	local characterName = runSafe(function()
+		return api.Unit:UnitName("player")
+	end) or "unknown"
+	if not enabled then
+		pcall(logbook.Trace, "disabled", characterName, resultCode, itemLink, oldGrade, newGrade)
+		return
 	end
+	onRegrade(characterName, resultCode, itemLink, oldGrade, newGrade, "self")
 end
 
 return feature

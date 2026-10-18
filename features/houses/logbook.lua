@@ -1,5 +1,7 @@
 local api = require("api")
 local addoninfo = require("PlayerDB/addoninfo")
+local datafiles = require("PlayerDB/datafiles")
+local clock = require("PlayerDB/clock")
 local regionmap = require("PlayerDB/features/houses/regionmap")
 
 local logbook = {}
@@ -360,7 +362,7 @@ end
 
 -- Adds or updates the house; returns isNew, and whether its stored position is still approximate.
 local function saveHouse(building, owner, lon, lat, approx)
-	local seen = copyPlain(api.Time:GetLocalTime())
+	local seen = clock.NowText()
 	local entry, path, list = findHouse(lon, lat, approx, building, owner)
 
 	if entry == nil then
@@ -377,7 +379,7 @@ local function saveHouse(building, owner, lon, lat, approx)
 		path = cellPath(lon, lat)
 		list = readList(path)
 		list[#list + 1] = entry
-		api.File:Write(path, list)
+		datafiles.Write(HOUSES_DIR, path, list)
 		writeCount(readCount() + 1)
 		logbook.Chat(11, "[PlayerDB Houses] New house: " .. building .. " owned by " .. owner
 			.. " in " .. entry.region .. " at " .. formatSextant(entry.location) .. (approx and " (approx)" or ""))
@@ -398,7 +400,7 @@ local function saveHouse(building, owner, lon, lat, approx)
 	-- a real house position replaces one taken from where the player stood
 	if isApprox(entry) and not approx then
 		removeEntry(list, entry)
-		api.File:Write(path, list)
+		datafiles.Write(HOUSES_DIR, path, list)
 		setPosition(entry, lon, lat, false)
 		path = cellPath(lon, lat)
 		list = readList(path)
@@ -411,7 +413,7 @@ local function saveHouse(building, owner, lon, lat, approx)
 	entry.addon_version = addoninfo.version
 	-- no longer kept; drop it from entries saved by earlier versions
 	entry.history = nil
-	api.File:Write(path, list)
+	datafiles.Write(HOUSES_DIR, path, list)
 
 	if #changes > 0 then
 		logbook.Chat(3, "[PlayerDB Houses] " .. building .. " changed: " .. table.concat(changes, ", "))
@@ -631,6 +633,13 @@ logbook.DebugLog = debugLog
 -- name of the building currently targeted, or nil
 function logbook.TargetBuildingName()
 	return targetIsBuilding()
+end
+
+-- Empties every house file and zeroes the count. Returns how many files were emptied.
+function logbook.ResetData()
+	local emptied = datafiles.Reset(HOUSES_DIR)
+	writeCount(0)
+	return emptied
 end
 
 function logbook.Count()

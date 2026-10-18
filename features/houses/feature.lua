@@ -7,7 +7,6 @@ local locate = require("PlayerDB/features/houses/locate")
 local feature = {
 	id = "houses",
 	label = "Houses",
-	events = { "TARGET_CHANGED" },
 }
 
 local enabled = false
@@ -161,6 +160,11 @@ local function queueScan(changeId, delay, retry)
 	end)
 end
 
+-- empties this feature's logged data
+function feature.ResetData()
+	return logbook.ResetData()
+end
+
 function feature.Enable()
 	if enabled then
 		return
@@ -185,20 +189,19 @@ function feature.Disable()
 	runSafe(statusdot.Free)
 end
 
-function feature.OnEvent(event, ...)
+-- main.lua calls this from its event window
+function feature.OnTargetChanged()
 	if not enabled then
 		return
 	end
-	if event == "TARGET_CHANGED" then
-		-- the previous building was not located before the target moved on
-		if activeSession ~= nil then
-			finishApprox(activeSession)
-		end
-		-- new target: red until it is known to be a building in range and logged
-		setDot(statusdot.NONE)
-		targetChangeId = targetChangeId + 1
-		queueScan(targetChangeId, SCAN_DELAY_MS, true)
+	-- the previous building was not located before the target moved on
+	if activeSession ~= nil then
+		finishApprox(activeSession)
 	end
+	-- new target: red until it is known to be a building in range and logged
+	setDot(statusdot.NONE)
+	targetChangeId = targetChangeId + 1
+	queueScan(targetChangeId, SCAN_DELAY_MS, true)
 end
 
 return feature

@@ -1,5 +1,7 @@
 local api = require("api")
 local addoninfo = require("PlayerDB/addoninfo")
+local datafiles = require("PlayerDB/datafiles")
+local clock = require("PlayerDB/clock")
 
 local logbook = {}
 
@@ -347,7 +349,7 @@ end
 
 local function flushBatch(batch)
 	for path in pairs(batch.dirty) do
-		api.File:Write(path, batch.lists[path])
+		datafiles.Write(PLAYERS_DIR, path, batch.lists[path])
 	end
 	if batch.added == 0 then
 		return 0
@@ -393,7 +395,7 @@ local function recordUnit(unit, batch)
 		debugLog("guild buff error: " .. tostring(guildBuff))
 		guildBuff = nil
 	end
-	local seen = copyPlain(api.Time:GetLocalTime())
+	local seen = clock.NowText()
 	debugLog(unit .. " player '" .. name .. "' guild '" .. tostring(guild) .. "' faction '" .. tostring(faction)
 		.. "' side '" .. tostring(side) .. "' class '" .. tostring(class) .. "' gs '" .. tostring(gearScore)
 		.. "' level '" .. tostring(level) .. "' heir '" .. tostring(heirLevel) .. "' family '" .. tostring(family)
@@ -669,6 +671,13 @@ function logbook.ScanRaid()
 		dumpRaid(selfId)
 	end
 	return members
+end
+
+-- Empties every player file and zeroes the count. Returns how many files were emptied.
+function logbook.ResetData()
+	local emptied = datafiles.Reset(PLAYERS_DIR)
+	writeCount(0)
+	return emptied
 end
 
 return logbook

@@ -6,7 +6,6 @@ local statusdots = require("PlayerDB/features/players/statusdots")
 local feature = {
 	id = "players",
 	label = "Players",
-	events = { "TARGET_CHANGED", "TEAM_MEMBERS_CHANGED" },
 }
 
 local enabled = false
@@ -85,6 +84,11 @@ local function queueSelfLog(chainId, delay)
 	end)
 end
 
+-- empties this feature's logged data
+function feature.ResetData()
+	return logbook.ResetData()
+end
+
 function feature.Enable()
 	if enabled then
 		return
@@ -108,16 +112,21 @@ function feature.Disable()
 	runSafe(statusdots.Free)
 end
 
-function feature.OnEvent(event, ...)
+-- main.lua calls these from its event window
+
+function feature.OnTargetChanged()
 	if not enabled then
 		return
 	end
-	if event == "TARGET_CHANGED" then
-		runSafe(logbook.LogTarget)
-		markScan(statusdots.TARGET)
-	elseif event == "TEAM_MEMBERS_CHANGED" then
-		queueRaidScan()
+	runSafe(logbook.LogTarget)
+	markScan(statusdots.TARGET)
+end
+
+function feature.OnTeamMembersChanged()
+	if not enabled then
+		return
 	end
+	queueRaidScan()
 end
 
 return feature
