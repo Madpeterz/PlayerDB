@@ -8,7 +8,7 @@ local settingswindow = require("PlayerDB/settingswindow")
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "2.0.0",
+	version = "2.5.0",
 	desc = "Logs players, houses and regrades"
 }
 
