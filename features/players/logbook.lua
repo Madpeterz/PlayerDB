@@ -1,4 +1,5 @@
 local api = require("api")
+local addoninfo = require("PlayerDB/addoninfo")
 
 local logbook = {}
 
@@ -325,7 +326,7 @@ local function readCount()
 end
 
 local function writeCount(count)
-	api.File:Write(COUNT_PATH, { players = copyPlain(count) })
+	api.File:Write(COUNT_PATH, { players = copyPlain(count), addon_version = addoninfo.version })
 end
 
 -- A batch caches the player files touched during one pass (a target change or a raid scan)
@@ -416,6 +417,7 @@ local function recordUnit(unit, batch)
 			heir_level = heirLevel or "0",
 			first_seen = seen,
 			last_seen = seen,
+			addon_version = addoninfo.version,
 		}
 		setGuildBuff(entry, guild, guildBuff)
 		log[#log + 1] = entry
@@ -467,6 +469,7 @@ local function recordUnit(unit, batch)
 	existing.stats = nil
 	setGuildBuff(existing, guild, guildBuff)
 	existing.last_seen = seen
+	existing.addon_version = addoninfo.version
 
 	if #changes > 0 then
 		logbook.Chat(3, "[PlayerDB] " .. name .. " changed: " .. table.concat(changes, ", "))

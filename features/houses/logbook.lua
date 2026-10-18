@@ -1,4 +1,5 @@
 local api = require("api")
+local addoninfo = require("PlayerDB/addoninfo")
 local regionmap = require("PlayerDB/features/houses/regionmap")
 
 local logbook = {}
@@ -275,7 +276,7 @@ local function readCount()
 end
 
 local function writeCount(count)
-	api.File:Write(COUNT_PATH, { houses = copyPlain(count) })
+	api.File:Write(COUNT_PATH, { houses = copyPlain(count), addon_version = addoninfo.version })
 end
 
 local function isApprox(entry)
@@ -368,6 +369,7 @@ local function saveHouse(building, owner, lon, lat, approx)
 			owner = owner,
 			first_seen = seen,
 			last_seen = seen,
+			addon_version = addoninfo.version,
 		}
 		setPosition(entry, lon, lat, approx)
 		setRegion(entry)
@@ -406,6 +408,7 @@ local function saveHouse(building, owner, lon, lat, approx)
 	setRegion(entry)
 	fillSpecFields(entry)
 	entry.last_seen = seen
+	entry.addon_version = addoninfo.version
 	-- no longer kept; drop it from entries saved by earlier versions
 	entry.history = nil
 	api.File:Write(path, list)

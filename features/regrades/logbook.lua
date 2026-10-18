@@ -1,4 +1,5 @@
 local api = require("api")
+local addoninfo = require("PlayerDB/addoninfo")
 
 local logbook = {}
 
@@ -144,6 +145,7 @@ local function writeCounts(counts)
 	for key, value in pairs(counts) do
 		out[key] = numberToString(value)
 	end
+	out.addon_version = addoninfo.version
 	api.File:Write(COUNT_PATH, out)
 end
 
@@ -188,6 +190,7 @@ function logbook.LogRegrade(characterName, resultCode, itemLink, oldGrade, newGr
 		old_grade_id = tonumber(oldGrade) and numberToString(tonumber(oldGrade)) or nil,
 		new_grade_id = tonumber(newGrade) and numberToString(tonumber(newGrade)) or nil,
 		time = numberToString(seen),
+		addon_version = addoninfo.version,
 	}
 
 	local path = characterPath(entry.character)

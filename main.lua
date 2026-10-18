@@ -2,15 +2,18 @@
 -- Hosts the features (players, houses, regrades): one event window routes game events to the
 -- features that are switched on. The addon manager's settings button opens a window to switch them.
 local api = require("api")
+local addoninfo = require("PlayerDB/addoninfo")
 local settings = require("PlayerDB/settings")
 local settingswindow = require("PlayerDB/settingswindow")
 
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "2.5.0",
+	version = "2.5.1",
 	desc = "Logs players, houses and regrades"
 }
+-- stamped on every logged entry as addon_version
+addoninfo.version = PlayerDB.version
 
 local FEATURES = {
 	require("PlayerDB/features/players/feature"),
