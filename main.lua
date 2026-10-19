@@ -1,5 +1,5 @@
 -- PlayerDB Main Module
--- Hosts the features (players, houses, regrades, forsale). One hidden event window registers every event and
+-- Hosts the features (players, houses, regrades, forsale, inventory). One hidden event window registers every event and
 -- calls the features directly; switched-off features ignore them. The addon manager's settings button
 -- opens a window to switch features on and off.
 local api = require("api")
@@ -11,8 +11,8 @@ local settingswindow = require("PlayerDB/settingswindow")
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "2.5.3",
-	desc = "Logs players, houses and regrades"
+	version = "2.6.0",
+	desc = "Logs players, houses, regrades and inventory"
 }
 -- stamped on every logged entry as addon_version
 addoninfo.version = PlayerDB.version
@@ -21,9 +21,10 @@ local players = require("PlayerDB/features/players/feature")
 local houses = require("PlayerDB/features/houses/feature")
 local regrades = require("PlayerDB/features/regrades/feature")
 local forsale = require("PlayerDB/features/forsale/feature")
+local inventory = require("PlayerDB/features/inventory/feature")
 
 -- for the settings window, reset and startup line
-local FEATURES = { players, houses, regrades, forsale }
+local FEATURES = { players, houses, regrades, forsale, inventory }
 
 -- house sale events, all passed to the ForSale feature as they come
 local HOUSE_SALE_EVENTS = {

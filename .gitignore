@@ -5,6 +5,7 @@ Players/*.dat
 Houses/*.dat
 Regrades/*.dat
 ForSale/*.dat
+Inventory/*.dat
 
 # feature switches
 settings.dat
