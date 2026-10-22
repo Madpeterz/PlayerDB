@@ -11,7 +11,7 @@ local settingswindow = require("PlayerDB/settingswindow")
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "2.6.0",
+	version = "2.6.1",
 	desc = "Logs players, houses, regrades and inventory"
 }
 -- stamped on every logged entry as addon_version
