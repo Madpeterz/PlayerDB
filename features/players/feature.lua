@@ -69,7 +69,7 @@ end
 
 -- log our own character on enable and then on a fixed interval
 local SELF_LOG_FIRST_DELAY_MS = 5000
-local SELF_LOG_INTERVAL_MS = 15 * 60 * 1000
+local SELF_LOG_INTERVAL_MS = 3 * 60 * 1000
 -- bumped on every enable/disable; a timer chain from an earlier one sees a newer id and stops
 local selfLogId = 0
 
