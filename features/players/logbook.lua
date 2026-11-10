@@ -218,10 +218,6 @@ local function getNumberField(info, key, minimum)
 	return copyPlain(number)
 end
 
-local function getFamily(info)
-	return pickField(info, {"family_name", "familyName", "family"})
-end
-
 -- buff id => the guild buff read from its tooltip, or false for any other buff; tooltips don't
 -- change, so each is only read once a session
 local guildBuffs = {}
@@ -388,8 +384,6 @@ local function recordUnit(unit, batch)
 	local level = getNumberField(info, "level", 1)
 	-- 0 is a real heir level (none earned yet)
 	local heirLevel = getNumberField(info, "heirLevel", 0)
-	-- only party/raid members show their family
-	local family = getFamily(info)
 	local guildBuffOk, guildBuff = pcall(getGuildBuff, unit)
 	if not guildBuffOk then
 		debugLog("guild buff error: " .. tostring(guildBuff))
@@ -398,7 +392,7 @@ local function recordUnit(unit, batch)
 	local seen = clock.NowText()
 	debugLog(unit .. " player '" .. name .. "' guild '" .. tostring(guild) .. "' faction '" .. tostring(faction)
 		.. "' side '" .. tostring(side) .. "' class '" .. tostring(class) .. "' gs '" .. tostring(gearScore)
-		.. "' level '" .. tostring(level) .. "' heir '" .. tostring(heirLevel) .. "' family '" .. tostring(family)
+		.. "' level '" .. tostring(level) .. "' heir '" .. tostring(heirLevel)
 		.. "' guild buff '" .. tostring(guildBuff and guildBuff.id) .. "'")
 
 	local path = playerPath(name)
@@ -410,7 +404,6 @@ local function recordUnit(unit, batch)
 		local entry = {
 			name = name,
 			guild = guild,
-			family = family,
 			faction = faction,
 			side = side,
 			class = class,
@@ -460,10 +453,6 @@ local function recordUnit(unit, batch)
 		existing.heir_level = heirLevel
 	elseif existing.heir_level == nil then
 		existing.heir_level = "0"
-	end
-	-- seen on raid members only: a target without one keeps what was seen before
-	if family ~= nil then
-		existing.family = family
 	end
 	-- stats were logged by 1.1.0, no longer kept
 	existing.max_health = nil
