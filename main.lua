@@ -1,5 +1,5 @@
 -- PlayerDB Main Module
--- Hosts the features (players, regrades, forsale, inventory, demoocr, soundtest). One hidden event window registers every event and
+-- Hosts the features (players, regrades, forsale, inventory, demoocr). One hidden event window registers every event and
 -- calls the features directly; switched-off features ignore them. The addon manager's settings button
 -- opens a window to switch features on and off.
 local api = require("api")
@@ -12,7 +12,7 @@ local sound = require("PlayerDB/sound")
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "2.9.0",
+	version = "2.9.1",
 	desc = "Logs players, regrades, inventory"
 }
 -- stamped on every logged entry as addon_version
@@ -23,10 +23,9 @@ local regrades = require("PlayerDB/features/regrades/feature")
 local forsale = require("PlayerDB/features/forsale/feature")
 local inventory = require("PlayerDB/features/inventory/feature")
 local demoocr = require("PlayerDB/features/demoocr/feature")
-local soundtest = require("PlayerDB/features/soundtest/feature")
 
 -- for the settings window, reset and startup line
-local FEATURES = { players, regrades, forsale, inventory, demoocr, soundtest }
+local FEATURES = { players, regrades, forsale, inventory, demoocr }
 
 -- house sale events, all passed to the ForSale feature as they come
 local HOUSE_SALE_EVENTS = {
@@ -164,7 +163,7 @@ local function OnUnload()
 		runSafe(feature.Disable)
 	end
 	runSafe(settingswindow.Free)
-	-- the sound windows are shared by DemoOCR and the sound test, so they go last
+	-- the sound windows DemoOCR plays through
 	runSafe(sound.Release)
 	-- Unregister events
 	if PlayerDB.eventWindow ~= nil then

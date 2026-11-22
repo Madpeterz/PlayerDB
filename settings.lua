@@ -17,7 +17,6 @@ local defaultSettings = {
 	-- off until switched on in the settings window
 	InventoryEnabled = false,
 	DemoOCREnabled = false,
-	SoundTestEnabled = false,
 
 	-- status dot positions
 	PlayerDotsX = 400,
@@ -28,12 +27,6 @@ local defaultSettings = {
 	InventoryIconY = 460,
 	DemoOCRIconX = 400,
 	DemoOCRIconY = 500,
-	SoundTestX = 400,
-	SoundTestY = 540,
-
-	-- sound test picks
-	SoundTestSound1 = "ranking",
-	SoundTestSound2 = "skill_book",
 }
 
 -- feature id -> setting key
@@ -43,7 +36,6 @@ local FEATURE_KEYS = {
 	forsale = "ForSaleEnabled",
 	inventory = "InventoryEnabled",
 	demoocr = "DemoOCREnabled",
-	soundtest = "SoundTestEnabled",
 }
 
 local function loadSettings()
@@ -100,7 +92,7 @@ function settings.Update(key, value)
 	return true
 end
 
--- feature switches, by feature id ("players", "regrades", "forsale", "inventory", "demoocr", "soundtest")
+-- feature switches, by feature id ("players", "regrades", "forsale", "inventory", "demoocr")
 function settings.IsEnabled(featureId)
 	return settings.Get(FEATURE_KEYS[featureId]) ~= false
 end
