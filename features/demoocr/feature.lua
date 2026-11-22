@@ -1,10 +1,11 @@
 -- DemoOCR: hands a request to the sync app through PlayerDB/Demos/. Clicking the icon sets request.dat to
 -- status true and starts writing the player's location to location.dat (same layout as WorldSatNav's
 -- location.dat). The sync app sets request.dat back to status false when it is done; that stops the
--- location updates. If it is still true after 60 seconds, the sync app is probably not running.
+-- location updates. If it is still true after 10 seconds, the sync app is probably not running.
 local api = require("api")
 local clock = require("PlayerDB/clock")
 local icon = require("PlayerDB/features/demoocr/icon")
+local sound = require("PlayerDB/sound")
 
 local feature = {
 	id = "demoocr",
@@ -16,11 +17,19 @@ local REQUEST_FILE = DEMOS_DIR .. "request.dat"
 local LOCATION_FILE = DEMOS_DIR .. "location.dat"
 
 local LOCATION_INTERVAL_MS = 1000
-local CHECK_INTERVAL_MS = 5 * 1000
-local TIMEOUT_MS = 60 * 1000
+local CHECK_INTERVAL_MS = 2 * 1000
+local TIMEOUT_MS = 10 * 1000
 local NO_SYNC_MESSAGE = "Enable sync app"
 -- chat tab the message goes to (the filter WorldSatNav uses for its notices)
 local CHAT_FILTER = 4
+
+-- SetSounds keys (see sound.lua); pairs are played stacked, as WorldSatNav plays its alerts
+local SOUND_STARTED = { "my_farm_info", "loot" }
+local SOUND_WAITING = "mail_write"
+local SOUND_DONE = { "raid_team", "skill_book" }
+local SOUND_FAILED = { "store_drain", "crime_records" }
+-- the waiting sound plays this often while the sync app works on the request
+local WAITING_SOUND_MS = 2 * 1000
 
 local enabled = false
 local waiting = false
@@ -34,6 +43,13 @@ local function runSafe(fn)
 		return nil
 	end
 	return result
+end
+
+-- a sound problem must never stop the request itself
+local function playStacked(keys)
+	runSafe(function()
+		sound.PlayStacked(keys[1], keys[2])
+	end)
 end
 
 local function writeRequest(status)
@@ -86,6 +102,7 @@ local function run(id, elapsedMs)
 			runSafe(function()
 				icon.SetDone("Done")
 			end)
+			playStacked(SOUND_DONE)
 			return
 		end
 		if elapsedMs >= TIMEOUT_MS then
@@ -98,9 +115,15 @@ local function run(id, elapsedMs)
 			runSafe(function()
 				api.Chat:DispatchChatMessage(CHAT_FILTER, "[PlayerDB] " .. NO_SYNC_MESSAGE)
 			end)
+			playStacked(SOUND_FAILED)
 			return
 		end
 		runSafe(writeLocation)
+		if elapsedMs % WAITING_SOUND_MS == 0 then
+			runSafe(function()
+				sound.Play(1, SOUND_WAITING)
+			end)
+		end
 		run(id, elapsedMs)
 	end)
 end
@@ -117,6 +140,7 @@ local function onIconClick()
 		writeRequest(true)
 		writeLocation()
 	end)
+	playStacked(SOUND_STARTED)
 	run(requestId, 0)
 end
 

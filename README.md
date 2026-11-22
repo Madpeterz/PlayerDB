@@ -15,7 +15,8 @@ Each feature can be switched on or off from the addon manager's settings button.
 | Regrades | on | Logs every regrade broadcast, with a status light for losses. |
 | ForSale | on | Logs house sale events (listing, cancelling, buying, sold). Currently raw, to confirm what the client provides. |
 | Inventory | off | Saves a snapshot of what your character carries shortly after load, then every 30 minutes. Click the icon to scan right away. |
-| DemoOCR | off | Hands a request to the sync app through `Demos/`. Click the icon and the addon writes your location until the sync app marks the request done. If nothing answers within 60 seconds, you get an "Enable sync app" message in chat. |
+| DemoOCR | off | Hands a request to the sync app through `Demos/`. Click the icon and the addon writes your location until the sync app marks the request done. If nothing answers within 10 seconds, you get an "Enable sync app" message in chat. Sounds mark each step: a start chime, a tick every 2 seconds while waiting, and different sounds for done and failed. |
+| Sound test | off | Shows a panel to try sounds. Each of the two rows has a category dropdown and a sound dropdown, starting on the WorldSatNav alert sounds (`ranking`, `skill_book`); play each one or both stacked. Picks are remembered. |
 
 The settings window also has a **Reset data** button (click twice to confirm) that empties all logged data files.
 
