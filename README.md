@@ -1,6 +1,6 @@
 # PlayerDB
 
-An ArcheAge Classic addon that logs what your client sees (players, houses, regrades, house sales and your inventory) to data files on disk.
+An ArcheAge Classic addon that logs what your client sees (players, regrades, house sales and your inventory) to data files on disk.
 
 > **Note: this addon is mostly pointless on its own.**
 > PlayerDB only writes raw data files. It does not show you anything useful in-game. It is built to work together with the paired sync app, which reads those files and uploads them to the site, and you need API access to that site for any of it to go anywhere. Without the app and API access, you are just filling a folder with `.dat` files.
@@ -12,7 +12,6 @@ Each feature can be switched on or off from the addon manager's settings button.
 | Feature | Default | What it does |
 | --- | --- | --- |
 | Players | on | Logs targeted players, raid/party members in range, and your own character (self is logged every 3 minutes). |
-| Houses | on | Logs targeted buildings with their owner and position. |
 | Regrades | on | Logs every regrade broadcast, with a status light for losses. |
 | ForSale | on | Logs house sale events (listing, cancelling, buying, sold). Currently raw, to confirm what the client provides. |
 | Inventory | off | Saves a snapshot of what your character carries shortly after load, then every 30 minutes. Click the icon to scan right away. |
@@ -33,7 +32,6 @@ The addon writes into its own folder:
 | Folder | Contents |
 | --- | --- |
 | `Players/` | Player entries |
-| `Houses/` | House entries |
 | `Regrades/` | Regrade entries |
 | `ForSale/` | Raw house sale events |
 | `Inventory/` | One inventory snapshot per character |

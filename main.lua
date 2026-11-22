@@ -1,5 +1,5 @@
 -- PlayerDB Main Module
--- Hosts the features (players, houses, regrades, forsale, inventory, demoocr). One hidden event window registers every event and
+-- Hosts the features (players, regrades, forsale, inventory, demoocr). One hidden event window registers every event and
 -- calls the features directly; switched-off features ignore them. The addon manager's settings button
 -- opens a window to switch features on and off.
 local api = require("api")
@@ -11,21 +11,20 @@ local settingswindow = require("PlayerDB/settingswindow")
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "2.7.3",
-	desc = "Logs players, houses, regrades, inventory"
+	version = "2.8.0",
+	desc = "Logs players, regrades, inventory"
 }
 -- stamped on every logged entry as addon_version
 addoninfo.version = PlayerDB.version
 
 local players = require("PlayerDB/features/players/feature")
-local houses = require("PlayerDB/features/houses/feature")
 local regrades = require("PlayerDB/features/regrades/feature")
 local forsale = require("PlayerDB/features/forsale/feature")
 local inventory = require("PlayerDB/features/inventory/feature")
 local demoocr = require("PlayerDB/features/demoocr/feature")
 
 -- for the settings window, reset and startup line
-local FEATURES = { players, houses, regrades, forsale, inventory, demoocr }
+local FEATURES = { players, regrades, forsale, inventory, demoocr }
 
 -- house sale events, all passed to the ForSale feature as they come
 local HOUSE_SALE_EVENTS = {
@@ -77,7 +76,7 @@ local function setEnabled(featureId, enable)
 	api.Log:Info("[PlayerDB] " .. feature.label .. (enable and " on" or " off"))
 end
 
--- empties every feature's logged data (Players, Houses, Regrades), from the settings window
+-- empties every feature's logged data (Players, Regrades), from the settings window
 local function resetData()
 	local parts = {}
 	for _, feature in ipairs(FEATURES) do
@@ -116,7 +115,6 @@ local function OnLoad()
 	function PlayerDB:EventListener(event, ...)
 		if event == "TARGET_CHANGED" then
 			runSafe(players.OnTargetChanged)
-			runSafe(houses.OnTargetChanged)
 		elseif event == "TEAM_MEMBERS_CHANGED" then
 			runSafe(players.OnTeamMembersChanged)
 		elseif event == "GRADE_ENCHANT_BROADCAST" then

@@ -12,7 +12,6 @@ local loaded = nil
 local defaultSettings = {
 	-- features
 	PlayersEnabled = true,
-	HousesEnabled = true,
 	RegradesEnabled = true,
 	ForSaleEnabled = true,
 	-- off until switched on in the settings window
@@ -22,8 +21,6 @@ local defaultSettings = {
 	-- status dot positions
 	PlayerDotsX = 400,
 	PlayerDotsY = 400,
-	HouseDotX = 400,
-	HouseDotY = 420,
 	RegradeDotX = 400,
 	RegradeDotY = 440,
 	InventoryIconX = 400,
@@ -35,7 +32,6 @@ local defaultSettings = {
 -- feature id -> setting key
 local FEATURE_KEYS = {
 	players = "PlayersEnabled",
-	houses = "HousesEnabled",
 	regrades = "RegradesEnabled",
 	forsale = "ForSaleEnabled",
 	inventory = "InventoryEnabled",
@@ -96,7 +92,7 @@ function settings.Update(key, value)
 	return true
 end
 
--- feature switches, by feature id ("players", "houses", "regrades", "forsale", "inventory", "demoocr")
+-- feature switches, by feature id ("players", "regrades", "forsale", "inventory", "demoocr")
 function settings.IsEnabled(featureId)
 	return settings.Get(FEATURE_KEYS[featureId]) ~= false
 end
