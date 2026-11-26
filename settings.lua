@@ -17,6 +17,7 @@ local defaultSettings = {
 	-- off until switched on in the settings window
 	InventoryEnabled = false,
 	DemoOCREnabled = false,
+	HouseTargetEnabled = true,
 
 	-- status dot positions
 	PlayerDotsX = 400,
@@ -27,6 +28,8 @@ local defaultSettings = {
 	InventoryIconY = 460,
 	DemoOCRIconX = 400,
 	DemoOCRIconY = 500,
+	HouseTargetIconX = 400,
+	HouseTargetIconY = 540,
 }
 
 -- feature id -> setting key
@@ -36,6 +39,7 @@ local FEATURE_KEYS = {
 	forsale = "ForSaleEnabled",
 	inventory = "InventoryEnabled",
 	demoocr = "DemoOCREnabled",
+	housetarget = "HouseTargetEnabled",
 }
 
 local function loadSettings()

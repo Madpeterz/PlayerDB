@@ -6,6 +6,7 @@ Regrades/*.dat
 ForSale/*.dat
 Inventory/*.dat
 Demos/*.dat
+Houses/*.dat
 
 # feature switches
 settings.dat
