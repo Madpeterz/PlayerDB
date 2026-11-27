@@ -12,7 +12,7 @@ local sound = require("PlayerDB/sound")
 local PlayerDB = {
 	name = "PlayerDB",
 	author = "Madpeter",
-	version = "3.0.0",
+	version = "3.0.1",
 	desc = "Logs players, regrades, inventory, houses"
 }
 -- stamped on every logged entry as addon_version

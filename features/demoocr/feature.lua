@@ -16,8 +16,9 @@ local DEMOS_DIR = "PlayerDB/Demos/"
 local REQUEST_FILE = DEMOS_DIR .. "request.dat"
 local LOCATION_FILE = DEMOS_DIR .. "location.dat"
 
-local LOCATION_INTERVAL_MS = 1000
-local CHECK_INTERVAL_MS = 2 * 1000
+-- both must divide WAITING_SOUND_MS and TIMEOUT_MS evenly, since run() matches them with %
+local LOCATION_INTERVAL_MS = 250
+local CHECK_INTERVAL_MS = 500
 local TIMEOUT_MS = 10 * 1000
 local NO_SYNC_MESSAGE = "Enable sync app"
 -- chat tab the message goes to (the filter WorldSatNav uses for its notices)
